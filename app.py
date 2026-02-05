@@ -9,6 +9,9 @@ st.title("🔍 Parts Search Engine")
 def load_data():
     df = pd.read_excel("Guide Data 20260122.xlsx")
 
+    # Show real columns (for safety)
+    df = df.iloc[:, [0, 1, 2, 3, 4, 5, 6, 8]]
+
     df.columns = [
         "Brand",
         "Model",
@@ -17,10 +20,9 @@ def load_data():
         "Category",
         "EN_Name",
         "TH_Name",
-        "URL"
+        "URL",
     ]
 
-    # convert everything to string for safe searching
     df = df.astype(str)
     return df
 
