@@ -28,15 +28,17 @@ def load_data():
 
     df = df.astype(str)
 
-    # 🔑 GOOGLE-LIKE SEARCH TEXT
-df["SEARCH"] = (
-    df["PartNumber"] + " " +
-    df["Brand"] + " " +
-    df["Model"] + " " +
-    df["Category"] + " " +
-    df["EN_Name"] + " " +
-    df["TH_Name"]
-).apply(normalize)
+    # 🔑 GOOGLE-LIKE SEARCH TEXT  ✅ INSIDE FUNCTION
+    df["SEARCH"] = (
+        df["PartNumber"] + " " +
+        df["Brand"] + " " +
+        df["Model"] + " " +
+        df["Category"] + " " +
+        df["EN_Name"] + " " +
+        df["TH_Name"]
+    ).apply(normalize)
+
+    return df
 
     return df
 
@@ -51,7 +53,7 @@ query = st.text_input(
 
 if query:
     q = normalize(query)
-    keywords = q.split(" ")
+keywords = [k for k in q.split(" ") if k]
 
     # ⚡ FAST filtering (contains ALL keywords)
     mask = df["SEARCH"].apply(
