@@ -1,9 +1,17 @@
 import streamlit as st
 import pandas as pd
-from rapidfuzz import process, fuzz
+import re
 
 st.set_page_config(page_title="Parts Search", layout="wide")
 st.title("🔍 Parts Search Engine")
+
+# ---------------- NORMALIZE TEXT ----------------
+
+def normalize(text):
+    text = str(text).lower()
+    text = re.sub(r"[-_/]", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
 
 # ---------------- LOAD DATA ----------------
 @st.cache_data
@@ -20,49 +28,63 @@ def load_data():
 
     df = df.astype(str)
 
-    # Search text for fuzzy matching
-    df["SEARCH"] = (
-        df["PartNumber"] + " " +
-        df["Brand"] + " " +
-        df["Model"] + " " +
-        df["Category"] + " " +
-        df["EN_Name"] + " " +
-        df["TH_Name"]
-    )
+    # 🔑 GOOGLE-LIKE SEARCH TEXT
+df["SEARCH"] = (
+    df["PartNumber"] + " " +
+    df["Brand"] + " " +
+    df["Model"] + " " +
+    df["Category"] + " " +
+    df["EN_Name"] + " " +
+    df["TH_Name"]
+).apply(normalize)
 
     return df
 
 df = load_data()
-
 st.caption(f"📦 Total parts: {len(df):,}")
 
 # ---------------- SEARCH ----------------
 query = st.text_input(
-    "Smart search (Google-like)",
-    placeholder="5VX 2586A, zta, tmax brake, ผ้าเบรค"
+    "Smart search (Google-style)",
+    placeholder="SX3 bar black, 5VX2586A, zeta tmax brake"
 )
 
 if query:
-    # ⚡ Fuzzy ranking
-    matches = process.extract(
-        query,
-        df["SEARCH"],
-        scorer=fuzz.WRatio,
-        limit=200
+    q = normalize(query)
+    keywords = q.split(" ")
+
+    # ⚡ FAST filtering (contains ALL keywords)
+    mask = df["SEARCH"].apply(
+        lambda x: all(k in x for k in keywords)
     )
 
-    # Keep good matches only
-    scores = [m[1] for m in matches]
-    idx = [m[2] for m in matches if m[1] > 60]
+    result = df[mask].copy()
 
-    result = df.iloc[idx].copy()
-    result["Score"] = scores[:len(result)]
+    # If too many or zero → fallback fuzzy
+    if len(result) == 0 or len(result) > 2000:
+        from rapidfuzz import process, fuzz
+
+        matches = process.extract(
+            q,
+            df["SEARCH"],
+            scorer=fuzz.WRatio,
+            limit=300
+        )
+
+        idx = [m[2] for m in matches if m[1] > 55]
+        result = df.iloc[idx].copy()
+        result["Score"] = [m[1] for m in matches[:len(result)]]
+    else:
+        # Score by number of matched keywords
+        result["Score"] = result["SEARCH"].apply(
+            lambda x: sum(k in x for k in keywords)
+        )
 
     result = result.sort_values("Score", ascending=False)
 
-    st.success(f"Top matches (ranked)")
+    st.success(f"Found {len(result):,} results")
 
-    # ---------------- PIVOT SUMMARY ----------------
+    # ---------------- SUMMARY ----------------
     st.subheader("📊 Summary")
 
     pivot = (
@@ -75,19 +97,19 @@ if query:
 
     st.dataframe(pivot, use_container_width=True)
 
-    # ---------------- DETAIL ----------------
-    st.subheader("📄 Best Matches")
+    # ---------------- DETAILS ----------------
+    st.subheader("📄 Matching Parts")
 
     st.dataframe(
         result[[
             "Brand", "Model", "Year", "PartNumber",
             "Category", "EN_Name", "TH_Name",
-            "Price", "Score", "URL"
+            "Price", "URL"
         ]],
         use_container_width=True
     )
 
-    # ---------------- PRODUCT BUTTONS ----------------
+    # ---------------- PRODUCT LINKS ----------------
     st.subheader("🔗 Open Product Page")
 
     for _, row in result.head(20).iterrows():
@@ -99,4 +121,4 @@ if query:
         cols[4].link_button("Open", row["URL"])
 
 else:
-    st.info("Type anything — typo is OK")
+    st.info("Type anything — dash, typo, spacing doesn’t matter")
