@@ -53,7 +53,7 @@ query = st.text_input(
 
 if query:
     q = normalize(query)
-keywords = [k for k in q.split(" ") if k]
+    keywords = [k for k in q.split(" ") if k]
 
     # ⚡ FAST filtering (contains ALL keywords)
     mask = df["SEARCH"].apply(
@@ -85,6 +85,9 @@ keywords = [k for k in q.split(" ") if k]
     result = result.sort_values("Score", ascending=False)
 
     st.success(f"Found {len(result):,} results")
+
+else:
+    st.info("Type anything — dash, typo, spacing doesn’t matter")
 
     # ---------------- SUMMARY ----------------
     st.subheader("📊 Summary")
