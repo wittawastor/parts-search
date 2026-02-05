@@ -1,44 +1,34 @@
 import streamlit as st
 import pandas as pd
+from rapidfuzz import process, fuzz
 
-st.set_page_config(
-    page_title="Parts Search",
-    layout="wide"
-)
-
+st.set_page_config(page_title="Parts Search", layout="wide")
 st.title("🔍 Parts Search Engine")
 
-# ---------------- LOAD DATA (FAST & SAFE) ----------------
+# ---------------- LOAD DATA ----------------
 @st.cache_data
 def load_data():
     df = pd.read_excel("Guide Data 20260122.xlsx")
 
-    # Select only needed columns: A B C D E F G I
-    df = df.iloc[:, [0, 1, 2, 3, 4, 5, 6, 8]]
+    # A B C D E F G H I
+    df = df.iloc[:, [0, 1, 2, 3, 4, 5, 6, 7, 8]]
     df.columns = [
-        "Brand",
-        "Model",
-        "Year",
-        "PartNumber",
-        "Category",
-        "EN_Name",
-        "TH_Name",
-        "URL",
+        "Brand", "Model", "Year", "PartNumber",
+        "Category", "EN_Name", "TH_Name",
+        "Price", "URL"
     ]
 
-    # Convert to string
     df = df.astype(str)
 
-    # 🔥 Create ONE combined search column (speed boost)
+    # Search text for fuzzy matching
     df["SEARCH"] = (
+        df["PartNumber"] + " " +
         df["Brand"] + " " +
         df["Model"] + " " +
-        df["Year"] + " " +
-        df["PartNumber"] + " " +
         df["Category"] + " " +
         df["EN_Name"] + " " +
         df["TH_Name"]
-    ).str.lower()
+    )
 
     return df
 
@@ -46,19 +36,31 @@ df = load_data()
 
 st.caption(f"📦 Total parts: {len(df):,}")
 
-# ---------------- SEARCH UI ----------------
-search = st.text_input(
-    "Search by part number or keyword",
-    placeholder="Example: ZETA, TMAX, 5VX-2586A, brake, ผ้าเบรก"
+# ---------------- SEARCH ----------------
+query = st.text_input(
+    "Smart search (Google-like)",
+    placeholder="5VX 2586A, zta, tmax brake, ผ้าเบรค"
 )
 
-if search:
-    keyword = search.lower()
+if query:
+    # ⚡ Fuzzy ranking
+    matches = process.extract(
+        query,
+        df["SEARCH"],
+        scorer=fuzz.WRatio,
+        limit=200
+    )
 
-    # ⚡ FAST SEARCH
-    result = df[df["SEARCH"].str.contains(keyword, na=False)]
+    # Keep good matches only
+    scores = [m[1] for m in matches]
+    idx = [m[2] for m in matches if m[1] > 60]
 
-    st.success(f"Found {len(result):,} results")
+    result = df.iloc[idx].copy()
+    result["Score"] = scores[:len(result)]
+
+    result = result.sort_values("Score", ascending=False)
+
+    st.success(f"Top matches (ranked)")
 
     # ---------------- PIVOT SUMMARY ----------------
     st.subheader("📊 Summary")
@@ -73,32 +75,28 @@ if search:
 
     st.dataframe(pivot, use_container_width=True)
 
-    # ---------------- DETAIL TABLE ----------------
-    st.subheader("📄 Part Details")
+    # ---------------- DETAIL ----------------
+    st.subheader("📄 Best Matches")
 
-    display_df = result[[
-        "Brand",
-        "Model",
-        "Year",
-        "PartNumber",
-        "Category",
-        "EN_Name",
-        "TH_Name",
-        "URL"
-    ]].copy()
+    st.dataframe(
+        result[[
+            "Brand", "Model", "Year", "PartNumber",
+            "Category", "EN_Name", "TH_Name",
+            "Price", "Score", "URL"
+        ]],
+        use_container_width=True
+    )
 
-    st.dataframe(display_df, use_container_width=True)
-
-    # ---------------- CLICKABLE PRODUCT BUTTONS ----------------
+    # ---------------- PRODUCT BUTTONS ----------------
     st.subheader("🔗 Open Product Page")
 
-    # Limit buttons for mobile usability
-    for _, row in display_df.head(20).iterrows():
-        cols = st.columns([2, 4, 2, 2])
+    for _, row in result.head(20).iterrows():
+        cols = st.columns([3, 4, 2, 2, 2])
         cols[0].markdown(f"**{row['Brand']}**")
         cols[1].markdown(row["PartNumber"])
         cols[2].markdown(row["Year"])
-        cols[3].link_button("Open", row["URL"])
+        cols[3].markdown(f"฿{row['Price']}")
+        cols[4].link_button("Open", row["URL"])
 
 else:
-    st.info("Start typing to search your parts")
+    st.info("Type anything — typo is OK")
