@@ -1,12 +1,13 @@
 import streamlit as st
 import pandas as pd
 import re
+from rapidfuzz import process, fuzz
 
+# ---------------- PAGE ----------------
 st.set_page_config(page_title="Parts Search", layout="wide")
 st.title("🔍 Parts Search Engine")
 
-# ---------------- NORMALIZE TEXT ----------------
-
+# ---------------- NORMALIZE ----------------
 def normalize(text):
     text = str(text).lower()
     text = re.sub(r"[-_/]", " ", text)
@@ -18,8 +19,7 @@ def normalize(text):
 def load_data():
     df = pd.read_excel("Guide Data 20260122.xlsx")
 
-    # A B C D E F G H I
-    df = df.iloc[:, [0, 1, 2, 3, 4, 5, 6, 7, 8]]
+    df = df.iloc[:, [0,1,2,3,4,5,6,7,8]]
     df.columns = [
         "Brand", "Model", "Year", "PartNumber",
         "Category", "EN_Name", "TH_Name",
@@ -28,7 +28,6 @@ def load_data():
 
     df = df.astype(str)
 
-    # 🔑 GOOGLE-LIKE SEARCH TEXT  ✅ INSIDE FUNCTION
     df["SEARCH"] = (
         df["PartNumber"] + " " +
         df["Brand"] + " " +
@@ -37,8 +36,6 @@ def load_data():
         df["EN_Name"] + " " +
         df["TH_Name"]
     ).apply(normalize)
-
-    return df
 
     return df
 
@@ -55,29 +52,24 @@ if query:
     q = normalize(query)
     keywords = [k for k in q.split(" ") if k]
 
-    # ⚡ FAST filtering (contains ALL keywords)
+    # FAST keyword filter
     mask = df["SEARCH"].apply(
         lambda x: all(k in x for k in keywords)
     )
-
     result = df[mask].copy()
 
-    # If too many or zero → fallback fuzzy
+    # Fallback fuzzy
     if len(result) == 0 or len(result) > 2000:
-        from rapidfuzz import process, fuzz
-
         matches = process.extract(
             q,
             df["SEARCH"],
             scorer=fuzz.WRatio,
             limit=300
         )
-
         idx = [m[2] for m in matches if m[1] > 55]
         result = df.iloc[idx].copy()
         result["Score"] = [m[1] for m in matches[:len(result)]]
     else:
-        # Score by number of matched keywords
         result["Score"] = result["SEARCH"].apply(
             lambda x: sum(k in x for k in keywords)
         )
@@ -85,9 +77,6 @@ if query:
     result = result.sort_values("Score", ascending=False)
 
     st.success(f"Found {len(result):,} results")
-
-else:
-    st.info("Type anything — dash, typo, spacing doesn’t matter")
 
     # ---------------- SUMMARY ----------------
     st.subheader("📊 Summary")
